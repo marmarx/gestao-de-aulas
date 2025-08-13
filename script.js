@@ -48,6 +48,23 @@ const iconEdit = `
   </svg>
 `
 
+// -- Main Functions --
+
+let alunos = JSON.parse(localStorage.getItem('alunos') || '[]');
+let aulas = JSON.parse(localStorage.getItem('aulas') || '[]');
+let alunoSelecionado = null;
+
+function showPage(id, alunoId = null) {
+  document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  dateInputs = document.getElementById(id).querySelector('input[type="date"]')
+  if (id != 'report') dateInputs && (dateInputs.value = todayDate());
+  if (id === 'list-students') renderStudents();
+  if (id === 'list-lessons') renderLessons();
+  if (id === 'add-lesson') fillStudentDropdown();
+  if (id === 'add-payment') fillPaymentDropdown(alunoId); // Passa o ID do aluno para a função de preenchimento
+}
+
 // -- FAB functions --
 
 const toggleFab = (fab) => {
@@ -94,23 +111,6 @@ const invertDate = (date) => {
 document.getElementById('startFilter').value = todayDate(startDate);
 document.getElementById('endFilter').value = todayDate(endDate);
 
-// -- Main Functions --
-
-let alunos = JSON.parse(localStorage.getItem('alunos') || '[]');
-let aulas = JSON.parse(localStorage.getItem('aulas') || '[]');
-let alunoSelecionado = null;
-
-function showPage(id, alunoId = null) {
-  document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  dateInputs = document.getElementById(id).querySelector('input[type="date"]')
-  if (id != 'report') dateInputs && (dateInputs.value = todayDate());
-  if (id === 'list-students') renderStudents();
-  if (id === 'list-lessons') renderLessons();
-  if (id === 'add-lesson') fillStudentDropdown();
-  if (id === 'add-payment') fillPaymentDropdown(alunoId); // Passa o ID do aluno para a função de preenchimento
-}
-
 // -- Student Functions --
 
 document.getElementById('student-form').addEventListener('submit', e => {
@@ -144,10 +144,10 @@ function renderStudents() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${a.nome}</td>
-      <td>${a.responsavel || ''}</td>
-      <td style="color:${a.pausado ? 'red' : 'green'};">${a.pausado ? 'Pausado' : 'Ativo'}</td>
-      <td>R$ ${valorDevido.toFixed(2).replace(".",",")}</td>
-      <td>R$ ${a.pagos.toFixed(2).replace(".",",")}</td>
+      <td class="mob">${a.responsavel || ''}</td>
+      <td class="mob" style="color:${a.pausado ? 'red' : 'green'};">${a.pausado ? 'Pausado' : 'Ativo'}</td>
+      <td class="mob">R$ ${valorDevido.toFixed(2).replace(".",",")}</td>
+      <td class="mob">R$ ${a.pagos.toFixed(2).replace(".",",")}</td>
       <td style="color:${cor}; font-weight:bold;">R$ ${saldo.toFixed(2).replace(".",",")}</td>
       <td class="flexContainer">
         <div class="button" onclick="openStudent('${a.id}')">${iconDetails}</div>
@@ -300,7 +300,7 @@ function renderLessons() {
       <td>${aluno?.nome || ''}</td>
       <td>${l.data}</td>
       <td>${l.tempo.toString().replace(".",",")}</td>
-      <td>R$ ${l.experimental ? '0,00' : l.valorHora.toFixed(2).replace(".",",")}</td>
+      <td class="mob">R$ ${l.experimental ? '0,00' : l.valorHora.toFixed(2).replace(".",",")}</td>
       <td class="flexContainer">
         <div class="button" onclick="editLesson('${l.id}')">${iconEdit}</div>
         <div class="button" onclick="deleteLesson('${l.id}')">${iconDelete}</div>
