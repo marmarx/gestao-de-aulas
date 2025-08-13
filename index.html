@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<title>Gestão de Aulas</title>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="author" content="Marco Martins">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2f4550">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora&family=Open+Sans&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+<script type="text/javascript" src="script.js"></script>
+</head>
+
+<body>
+<header>
+  <h1>Gestão de Aulas</h1>
+  <nav>
+    <input type="radio" id="tab1" class="tab" name="tab" checked onclick="showPage('list-students')" /><label class="tab-label" for="tab1">Alunos</label>
+    <input type="radio" id="tab2" class="tab" name="tab" onclick="showPage('list-lessons')" /><label class="tab-label" for="tab2">Aulas</label>
+    <input type="radio" id="tab3" class="tab" name="tab" onclick="showPage('list-config')" /><label class="tab-label" for="tab3">Configurações</label>
+    <div class="line"></div>
+  </nav>
+</header>
+
+<section id="list-config">
+  <h2>Configurações</h2>
+  <button onclick="exportData()">Exportar dados</button>
+  <input type="file" id="fileInput" style="display: none;" onchange="importData(event)">
+  <button onclick="document.getElementById('fileInput').click()">Importar dados</button>
+  <button onclick="eraseData()">Apagar dados</button>
+</section>
+
+<section id="add-student">
+  <h2>Adicionar / Editar Aluno</h2>
+  <div class="container">
+    <form id="student-form">
+      <input name="id" type="hidden">
+      <input name="nome" placeholder="Nome do aluno" required>
+      <input name="responsavel" placeholder="Responsável">
+      <input name="endereco" placeholder="Endereço">
+      <input name="telefone" placeholder="Telefone">
+      <input name="escola" placeholder="Escola">
+      <input name="serie" placeholder="Série">
+      <input name="valorHora" placeholder="Valor hora aula" type="number" step="0.05" required>
+      <select name="diaSemana">
+        <option value="">Dia da semana</option>
+        <option>Segunda</option><option>Terça</option><option>Quarta</option><option>Quinta</option><option>Sexta</option><option>Sábado</option><option>Domingo</option>
+      </select>
+      <input name="horario" placeholder="Horário da aula (HH:MM)">
+
+      <div class="dateFlex" style="max-width:unset">
+        <div>Início:</div><input class="dateFilter" name="inicioContrato" type="date">
+        <div>Fim:</div><input class="dateFilter" name="fimContrato" type="date">
+      </div>
+
+      <textarea name="observacoes" placeholder="Observações gerais"></textarea>
+      <button>Salvar</button>
+      <button onclick="showPage('list-students')">Cancelar</button>
+    </form>
+  </div>
+</section>
+
+<section id="list-students">
+  <h2>Lista de Alunos</h2>
+  <table id="students-table">
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>Responsável</th>
+        <th>Situação</th>
+        <th>Devido</th>
+        <th>Pago</th>
+        <th>Saldo</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section id="student-details">
+  <h2>Detalhes do Aluno</h2>
+  <div class="halfContainer">
+    <div id="student-info" class="half"></div>
+    <div id="student-history" class="half"></div>
+  </div>
+</section>
+
+<section id="add-lesson">
+  <h2>Adicionar / Editar Aula</h2>
+  <div class="container">
+    <form id="lesson-form">
+      <input name="id" type="hidden">
+      <select name="aluno" required></select>
+      <input name="data" type="date" required>
+      <input name="tempo" type="number" placeholder="Tempo (horas)" step="0.1" required>
+      <textarea name="obs" placeholder="Observações"></textarea>
+
+      <label class="checkbox-label">
+        <input type="checkbox" id="experimental" name="experimental" value="true">
+        <span>Aula experimental</span>
+      </label>
+      <br>
+      <button>Salvar Aula</button>
+      <button onclick="showPage('list-lessons')">Cancelar</button>
+    </form>
+  </div>
+</section>
+
+<section id="list-lessons">
+  <h2>Lista de Aulas</h2>
+  <select id="filter-student" onchange="renderLessons()">
+    <option value="">Todos os alunos</option>
+  </select>
+  <table id="lessons-table">
+    <thead><tr><th>Aluno</th><th>Data</th><th>Tempo</th><th>Valor/Hora</th><th>Ações</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section id="report">
+  <h2>Relatório de Aulas</h2>
+  <div class="dateFlex">
+    <div>Início:</div><input id="startFilter" class="dateFilter" type="date" onChange="minReport(this.value)">
+    <div>Fim:</div><input id="endFilter" class="dateFilter" type="date" onChange="maxReport(this.value)">
+  </div>
+  <div id="report-content"></div>
+  <div>
+    <button onclick="copyToClipboard()">Copiar</button>
+    <button onclick="showPage('list-students')">Voltar</button>
+  </div>
+</section>
+
+<section id="add-payment">
+  <h2>Registrar Pagamento</h2>
+  <div class="container">
+    <form id="payment-form">
+      <select name="aluno" required></select>
+      <input name="valor" type="number" placeholder="Valor pago" step="0.01" required>
+      <input name="data" type="date" required>
+      <button>Salvar Pagamento</button>
+      <button type="button" onclick="showPage('list-students')">Cancelar</button>
+    </form>
+  </div>
+</section>
+
+
+<div class="fab-container">
+  <div class="fab-option" onclick="actionFab('add-student')">  
+    <div class="fab-label">Aluno</div>
+    <div class="fab"><div class="icon icon-student"></div></div>
+  </div>
+
+  <div class="fab-option" onclick="actionFab('add-lesson')">
+    <div class="fab-label">Aula</div>
+    <div class="fab"><div class="icon icon-class"></div></div>
+  </div>
+
+  <div class="fab-option" onclick="actionFab('add-payment')">
+    <div class="fab-label">Pagamento</div>
+    <div class="fab"><div class="icon icon-payment"></div></div>
+  </div>
+
+  <div class="fab floatButton" onClick="toggleFab(this)">+</div>
+</div>
+</body>
+</html>
