@@ -1,4 +1,5 @@
 :root {
+  --today-day:'1';
   --body-back: #f6f6f6;
   --head-text: #fff;
   --header-left: #44289e; --header-right: #d02377; --tab-back: #ccc;
@@ -231,6 +232,25 @@ button {
   right: 1px; bottom: 2px;
   width: 4px; height: 1px;
   background-color: currentColor;
+}
+
+.icon-calendar {
+  width: 23px; height: 23px; position: relative;
+  border: 1px solid currentColor; border-radius: 5px;
+}
+
+.icon-calendar::before {
+  top: 0; left: 0;
+  width: 100%; height: 5px;
+  background-color: currentColor;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+}
+
+.icon-calendar::after {
+  content: var(--today-day);
+  top: 6px; left: 0; width: 100%;
+  font-size: .45em; text-align: center; color: currentColor;
 }
 
 @media screen and (max-width: 992px) {

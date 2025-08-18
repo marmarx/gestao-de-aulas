@@ -1,6 +1,6 @@
-const CACHE_NAME = 'gestao-aulas-cache-v2';
-const cache_exp = 1000*60*60*24;	//24 hours cache_exp
-const urlsToCache = [
+const cache_name = 'gestao-aulas-cache-v2';
+const cache_exp = 1000 //1000*60*60*24; //24 hours cache_exp
+const cache_resources = [
   './',
   'style.css',
   'script.js',
@@ -11,8 +11,8 @@ const urlsToCache = [
 //install event to pre-cache all initial resources
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+    caches.open(cache_name)
+      .then(cache => cache.addAll(cache_resources))
   );
 });
 

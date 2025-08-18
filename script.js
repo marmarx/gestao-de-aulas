@@ -359,6 +359,8 @@ const toggleFab = () => {
   const options = document.querySelectorAll('.fab-option');
   options.forEach(opt => opt.classList.toggle('fab-visible'));
   document.getElementById('overlay').classList.toggle('visible');
+  const today = new Date()
+  document.documentElement.style.setProperty('--today-day', `"${today.getDate()}"`)
 }
 
 const actionFab = (str) => {
