@@ -1,42 +1,92 @@
-<!--
-TO DO:
-- color scheme
-- today tab
-- change mobile strutcture
--->
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<title>Gestão de Aulas</title>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<meta name="author" content="Marco Martins">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#2f4550">
-<link rel="icon" type="image/png" href="favicon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300..800&display=swap" rel="stylesheet">
-<link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="style.css">
+  <title>Gestão de Aulas</title>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="author" content="Marco Martins">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2f4550">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300..800&display=swap" rel="stylesheet">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 <header>
   <h1>Gestão de Aulas</h1>
   <nav>
-    <input type="radio" id="tab1" class="tab" name="tab" checked onclick="showPage('today-lessons')" /><label class="tab-label" for="tab1">Hoje</label>
-    <input type="radio" id="tab2" class="tab" name="tab" onclick="showPage('list-lessons')" /><label class="tab-label" for="tab2">Aulas</label>
-    <input type="radio" id="tab3" class="tab" name="tab" onclick="showPage('list-students')" /><label class="tab-label" for="tab3">Alunos</label>
+    <input type="radio" id="tab1" class="tab" name="tab" checked onclick="showPage('agenda')" /><label class="tab-label" for="tab1">Agenda</label>
+    <input type="radio" id="tab2" class="tab" name="tab" onclick="showPage('list-students')" /><label class="tab-label" for="tab2">Alunos</label>
+    <input type="radio" id="tab3" class="tab" name="tab" onclick="showPage('panorama')" /><label class="tab-label" for="tab3">Panorama</label>
     <div class="line"></div>
   </nav>
   <div id="config-button" onclick="showPage('list-config')"></div>
 </header>
 
-<section id="today-lessons" class="active">
+<section id="agenda" class="active">
   <h2>Hoje</h2>
-  <div id="today"></div>
+  <div id="today" class="container grid"></div>
+  <h2>Próximos dias</h2>
+  <div id="nextDays" class="container grid"></div>
+</section>
+
+<section id="list-students">
+  <h2>Lista de Alunos</h2>
+  <input type="text" class="listFilter" placeholder="Filtrar por nome" oninput="renderStudents(this.value)">
+  <div id="students-grid" class="container grid"></div>
+</section>
+
+<section id="panorama">
+  <h2>Panorama</h2>
+  <div class="dateFlex">
+    <div class="half"><input id="startPanorama" class="dateFilter" type="text" placeholder="Data inicial" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" onChange="renderPanorama()"></div>
+    <div class="half"><input id="endPanorama" class="dateFilter" type="text" placeholder="Data final" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" onChange="renderPanorama()"></div>
+  </div>
+  <div class="container">
+    <table id="lessons-summary">
+      <thead><tr><th>Aluno</th><th>Aulas Dadas</th><th>Aulas Pagas</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <button onclick="showPage('list-lessons')">Todas as aulas</button>
+</section>
+
+<section id="student-details">
+  <h2>Detalhes do Aluno</h2>
+  <div class="halfContainer">
+    <div id="student-info" class="half"></div>
+    <div id="student-history" class="half"></div>
+  </div>
+</section>
+
+<section id="list-lessons">
+  <h2>Lista de Aulas</h2>
+  <select id="filter-student" class="listFilter" onchange="renderLessons()">
+    <option value="">Todos os alunos</option>
+  </select>
+  <div class="container">
+    <table id="lessons-table">
+      <thead><tr><th>Aluno</th><th>Data</th><th>Duração</th><th class="mob">Valor/Hora</th><th>Ações</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="report">
+  <h2>Relatório de Aulas</h2>
+  <div class="dateFlex">
+    <div class="half"><input id="startFilter" class="dateFilter" type="text" placeholder="Data inicial" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" onChange="minReport(this.value)"></div>
+    <div class="half"><input id="endFilter" class="dateFilter" type="text" placeholder="Data final" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" onChange="maxReport(this.value)"></div>
+  </div>
+  <div id="report-content"></div>
+  <div>
+    <button onclick="copyToClipboard()">Copiar</button>
+    <button onclick="showPage('list-students')">Voltar</button>
+  </div>
 </section>
 
 <section id="list-config">
@@ -51,62 +101,76 @@ TO DO:
   <h2>Adicionar / Editar Aluno</h2>
   <div class="container">
     <form id="student-form">
-      <input name="id" type="hidden">
 
-      <input name="nome" placeholder="Nome do aluno" required>
-      <input name="responsavel" placeholder="Responsável">
-      <input type="tel" name="telefone" placeholder="Telefone">
-      <input name="responsavel2" placeholder="Responsável 2">
-      <input type="tel" name="telefone2" placeholder="Telefone 2">
-      <input name="endereco" placeholder="Endereço">
+      <div class="halfContainer">
+        <div class="half">
+          <!-- id -> idAluno -->
+          <input name="id" type="hidden">
+          <label>Nome do aluno</label>
+          <input name="nome" placeholder="Nome do aluno" required>
+          <label>Nome do responsável</label>
+          <input name="responsavel" placeholder="Responsável">
+          <label>Telefone do responsável</label>
+          <input type="tel" name="telefone" placeholder="Telefone">
+          <label>Nome do responsável</label>
+          <input name="responsavel2" placeholder="Responsável 2">
+          <label>Telefone do responsável</label>
+          <input type="tel" name="telefone2" placeholder="Telefone 2">
+          <label>Endereço</label>
+          <input name="endereco" placeholder="Endereço">
+          <label>Escola</label>
+          <input name="escola" placeholder="Escola">
+          <label>Série e ano</label>
+          <input name="serie" placeholder="Série">
+        </div>
+        <div class="half">
+          <label>Dia e horário das aulas</label>
+          <div class="dateFlex" style="max-width:unset">
+            <div class="alwaysHalf">
+              <select name="diaSemana1" required>
+                <option value="" disabled selected>Dia da semana</option>
+                <option>Segunda</option><option>Terça</option><option>Quarta</option><option>Quinta</option><option>Sexta</option><option>Sábado</option><option>Domingo</option>
+              </select>
+            </div>
+            <div class="alwaysHalf">
+              <input name="horario1" type="text" placeholder="HH:MM" onfocus="this.type='time'" onblur="if(!this.value)this.type='text'">
+            </div>
+            <div class="alwaysHalf">
+              <select name="diaSemana2">
+                <option value="" disabled selected>Dia da semana</option>
+                <option>Segunda</option><option>Terça</option><option>Quarta</option><option>Quinta</option><option>Sexta</option><option>Sábado</option><option>Domingo</option>
+              </select>
+            </div>
+            <div class="alwaysHalf">
+              <input name="horario2" type="text" placeholder="HH:MM" onfocus="this.type='time'" onblur="if(!this.value)this.type='text'">
+            </div>
+            <div class="alwaysHalf">
+              <select name="diaSemana3">
+                <option value="" disabled selected>Dia da semana</option>
+                <option>Segunda</option><option>Terça</option><option>Quarta</option><option>Quinta</option><option>Sexta</option><option>Sábado</option><option>Domingo</option>
+              </select>
+            </div>
+            <div class="alwaysHalf">
+              <input name="horario3" type="text" placeholder="HH:MM" onfocus="this.type='time'" onblur="if(!this.value)this.type='text'">
+            </div>
+          </div>
 
-      <div class="dateFlex" style="max-width:unset">
-        <div class="half"><input name="escola" placeholder="Escola"></div>
-        <div class="half"><input name="serie" placeholder="Série"></div>
+          <label>Valor da hora aula</label>
+          <input name="valorHora" placeholder="Valor hora aula" type="number" step="0.05" required>
+
+          <label>Início e fim de contrato</label>
+          <div class="dateFlex" style="max-width:unset">
+            <div class="half"><input name="inicioContrato" type="text" placeholder="Início contrato" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'"></div>
+            <div class="half"><input name="fimContrato" type="text" placeholder="Fim contrato" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'"></div>
+          </div>
+          <label>Observações</label>
+          <textarea name="observacoes" placeholder="Observações gerais"></textarea>
+        </div>
       </div>
 
-      <input name="valorHora" placeholder="Valor hora aula" type="number" step="0.05" required>
-      <select name="diaSemana" required>
-        <option value="" disabled selected>Dia da semana</option>
-        <option>Segunda</option><option>Terça</option><option>Quarta</option><option>Quinta</option><option>Sexta</option><option>Sábado</option><option>Domingo</option>
-      </select>
-      <input name="horario" type="text" placeholder="HH:MM" onfocus="this.type='time'" onblur="if(!this.value)this.type='text'">
-
-      <div class="dateFlex" style="max-width:unset">
-        <div class="half"><input name="inicioContrato" type="text" placeholder="Início contrato" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'"></div>
-        <div class="half"><input name="fimContrato" type="text" placeholder="Fim contrato" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'"></div>
-      </div>
-
-      <textarea name="observacoes" placeholder="Observações gerais"></textarea>
       <button>Salvar</button>
       <button onclick="showPage('list-students')">Cancelar</button>
     </form>
-  </div>
-</section>
-
-<section id="list-students">
-  <h2>Lista de Alunos</h2>
-  <table id="students-table">
-    <thead>
-      <tr>
-        <th>Nome</th>
-        <th class="mob">Responsável</th>
-        <th class="mob">Situação</th>
-        <th class="mob">Devido</th>
-        <th class="mob">Pago</th>
-        <th>Saldo</th>
-        <th>Ações</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</section>
-
-<section id="student-details">
-  <h2>Detalhes do Aluno</h2>
-  <div class="halfContainer">
-    <div id="student-info" class="half"></div>
-    <div id="student-history" class="half"></div>
   </div>
 </section>
 
@@ -114,10 +178,12 @@ TO DO:
   <h2>Adicionar / Editar Aula</h2>
   <div class="container">
     <form id="lesson-form">
+      <!-- id -> idAluno -->
       <input name="id" type="hidden">
       <select name="aluno" required></select>
       <input name="data" type="date" required>
-      <input name="tempo" type="number" placeholder="Tempo (horas)" step="0.1" required>
+      <input name="horario" type="text" placeholder="Hora de início (HH:MM)" onfocus="this.type='time'" onblur="if(!this.value)this.type='text'">
+      <input name="tempo" type="number" placeholder="Duração (horas)" step="0.1" required>
       <textarea name="obs" placeholder="Observações"></textarea>
 
       <label class="checkbox-label">
@@ -126,32 +192,31 @@ TO DO:
       </label>
       <br>
       <button>Salvar Aula</button>
-      <button onclick="showPage('list-lessons')">Cancelar</button>
+      <button onclick="showPage('agenda')">Cancelar</button>
     </form>
   </div>
 </section>
 
-<section id="list-lessons">
-  <h2>Lista de Aulas</h2>
-  <select id="filter-student" onchange="renderLessons()">
-    <option value="">Todos os alunos</option>
-  </select>
-  <table id="lessons-table">
-    <thead><tr><th>Aluno</th><th>Data</th><th>Tempo</th><th class="mob">Valor/Hora</th><th>Ações</th></tr></thead>
-    <tbody></tbody>
-  </table>
-</section>
-
-<section id="report">
-  <h2>Relatório de Aulas</h2>
-  <div class="dateFlex">
-    <div class="half"><input id="startFilter" class="dateFilter" type="text" placeholder="Data inicial" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" onChange="minReport(this.value)"></div>
-    <div class="half"><input id="endFilter" class="dateFilter" type="text" placeholder="Data final" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" onChange="maxReport(this.value)"></div>
-  </div>
-  <div id="report-content"></div>
-  <div>
-    <button onclick="copyToClipboard()">Copiar</button>
-    <button onclick="showPage('list-students')">Voltar</button>
+<section id="edit-event">
+  <h2>Reagendar Aula</h2>
+  <div class="container">
+    <form id="event-form">
+      <!-- id -> idAluno -->
+      <input name="id" type="hidden" readonly>
+      <label>Nome do aluno</label>
+      <select name="aluno" disabled></select>
+      <label>Data original</label>
+      <input name="dataOriginal" type="date" readonly>
+      <label>Nova data</label>
+      <input name="novaData" type="date" required>
+      <label>Horário original</label>
+      <input name="horarioOriginal" type="text" readonly>
+      <label>Novo horário</label>
+      <input name="novoHorario" type="text" placeholder="HH:MM" onfocus="this.type='time'" onblur="if(!this.value)this.type='text'">
+      <button type="button" onclick="reagendar()">Reagendar aula</button>
+      <button type="button" onclick="reagendar(true)">Cancelar aula</button>
+      <button type="button" onclick="showPage('agenda')">Cancelar edição</button>
+    </form>
   </div>
 </section>
 
@@ -177,7 +242,12 @@ TO DO:
   </div>
 
   <div class="fab-option" onclick="actionFab('add-lesson')">
-    <div class="fab-label">Aula</div>
+    <div class="fab-label">Aula Dada</div>
+    <div class="fab"><div class="icon icon-class"></div></div>
+  </div>
+
+  <div class="fab-option" onclick="actionFab('add-lesson')">
+    <div class="fab-label">Agendamento</div>
     <div class="fab"><div class="icon icon-class"></div></div>
   </div>
 

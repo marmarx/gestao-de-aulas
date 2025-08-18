@@ -58,80 +58,299 @@ document.getElementById('config-button').innerHTML = config;
 
 // -- Main Functions --
 
-let alunos = JSON.parse(localStorage.getItem('alunos') || '[]');
-let aulas = JSON.parse(localStorage.getItem('aulas') || '[]');
-let alunoSelecionado = null;
-
-function showPage(id, alunoId = null) {
+function showPage(id, alunoId = null, lessonDate = null, horario = null) {
   document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   dateInputs = document.getElementById(id).querySelector('input[type="date"]')
-  if (id === 'today-lessons') renderToday();
+  if (id === 'agenda') renderAgenda();
+  if (id === 'panorama') renderPanorama();
   if (id === 'list-lessons') renderLessons();
   if (id === 'list-students') renderStudents();
-  if (id === 'add-lesson') fillStudentDropdown();
-  if (id === 'add-payment') fillPaymentDropdown(alunoId); // Passa o ID do aluno para a função de preenchimento
-  if (id != 'report') dateInputs && (dateInputs.value = todayDate());
+  if (id === 'add-lesson') fillDropdown('lesson-form', alunoId, lessonDate, horario);
+  if (id === 'add-payment') fillDropdown('payment-form', alunoId);
+  if (id === 'edit-event') fillDropdown('edit-event', alunoId, lessonDate, horario)
+}
+
+function fillDropdown(page, id = null, date = null, horario = null) {
+  const form = document.getElementById(page);
+  const sel = form.querySelector('select[name="aluno"]');
+
+  const options = alunos
+    .filter(a => !a.pausado)
+    .map(a => `<option value="${a.id}">${a.nome}</option>`)
+    .join('');
+  sel.innerHTML = `<option value="" disabled>Todos os alunos</option>` + options;
+  if (id) sel.value = id  // Se um alunoId foi passado, selecione-o
+  if (page=='edit-event') {
+    form.querySelector('input[name="id"]').value = id
+    form.querySelector('input[name="horarioOriginal"]').value = horario
+  }
+  if (page=='lesson-form') form.querySelector('input[name="horario"]').value = horario
+
+  const dateInput = form.querySelector('input[name="data"]') || form.querySelector('input[name="dataOriginal"]');
+  dateInput.value = date ? date : hojeISO(); // Use a data da aula se fornecida, ou a data de hoje
 }
 
 // -- Today Functions --
 
-function renderToday() {
-  const today = new Date();
-  const todayLessons = aulas.filter(a => {
-    const lessonDate = new Date(a.data);
-    return lessonDate.getDate() === today.getDate() &&
-           lessonDate.getMonth() === today.getMonth() &&
-           lessonDate.getFullYear() === today.getFullYear();
+const spreadPast = 0
+const spreadFuture = 14
+
+const diasMap = { "Domingo": 0, "Segunda": 1, "Terça": 2, "Quarta": 3, "Quinta": 4, "Sexta": 5, "Sábado": 6 }
+const diasSemanaNomes = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+function nextLessons(alunos) {
+  const hoje = new Date();
+  const fim = new Date();
+  fim.setDate(hoje.getDate() + spreadFuture);
+  hoje.setDate(hoje.getDate() - spreadPast);
+
+  const hojeStr = hoje.toISOString().split("T")[0];
+  const amanha = new Date(hoje);
+  amanha.setDate(hoje.getDate() + 1);
+  const amanhaStr = amanha.toISOString().split("T")[0];
+
+  const aulasHoje = [];
+  const aulasOutras = [];
+
+  // Loop de cada dia do intervalo
+  for (let d = new Date(hoje); d <= fim; d.setDate(d.getDate() + 1)) {
+    const diaSemanaNum = d.getDay();
+    const diaSemanaNome = diasSemanaNomes[diaSemanaNum];
+    const dataStr = d.toISOString().split("T")[0]; // formato YYYY-MM-DD
+
+    // Determina o rótulo da data para exibição
+    let labelData;
+    if (dataStr === hojeStr) labelData = `Hoje (${diaSemanaNome})`;
+    else if (dataStr === amanhaStr) labelData = `Amanhã (${diaSemanaNome})`;
+    else labelData = `${dataStr} (${diaSemanaNome})`
+
+    // Para cada aluno, verifica se tem aula neste dia
+    alunos.forEach(aluno => {
+      if (aluno.pausado) return;
+      if (aluno.inicioContrato && new Date(aluno.inicioContrato) > d) return;
+      if (aluno.fimContrato && new Date(aluno.fimContrato) < d) return;
+
+      for (let i=1; i<=3; i++) {
+        if (diasMap[aluno[`diaSemana${i}`]] === diaSemanaNum) {
+          const aula = {
+            eventId: 'ev_' + uuidv4(),
+            alunoId: aluno.id,
+            nome: aluno.nome,
+            telefone: aluno.telefone,
+            data: labelData,      // formato amigável para exibição
+            dataISO: dataStr,     // formato YYYY-MM-DD para uso no código
+            horario: aluno[`horario${i}`],
+            endereco: aluno.endereco
+          }
+          if (dataStr === hojeStr) aulasHoje.push(aula)
+          else aulasOutras.push(aula)
+        }
+      }
+    });
+  }
+
+  // Ordena por dataISO e horário
+  aulasDadas.sort((a, b) => {
+    const aDate = new Date(`${a.dataISO}T${a.horario}`);
+    const bDate = new Date(`${b.dataISO}T${b.horario}`);
+    return aDate - bDate;
   });
 
-  document.getElementById('today').innerHTML = todayLessons.map(a => `
-    <div class="lesson">
-      <p><b>Aluno:</b> ${alunos.find(al => al.id === a.aluno)?.nome || 'Desconhecido'}</p>
-      <p><b>Horário:</b> ${a.horario}</p>
-      <p><b>Duração:</b> ${a.tempo} horas</p>
-    </div>
-  `).join('');
+  return [aplicarAjustesAgenda(aulasHoje), aplicarAjustesAgenda(aulasOutras)];
 }
 
-function renderWeek() {
+function aplicarAjustesAgenda(aulasAgendadas) {
+  return aulasAgendadas
+    .filter(ag => !aulasDadas.some(ad => ad.aluno === ag.alunoId && ad.data === ag.dataISO && ad.horario == ag.horario)) // remove aulas dadas
+    .map(ag => { // aplica reagendamentos
+      const evento = reagendadas.find(r => r.idAluno === ag.id && r.dataOriginal === ag.dataISO && r.horarioOriginal === ag.horario);
+
+      if (evento) {
+        //if (evento.cancelled) return null; // completly remove cancelled classes (won't be displayed)
+        return {
+          ...ag,
+          data: evento.novaDataLabel,
+          dataISO: evento.novaData,
+          horario: evento.novoHorario,
+          cancelled: evento.cancelled
+        };
+      }
+
+      return ag;
+    })
+    .filter(Boolean); // removes all nulls (i.e. cancelled aulas)
+}
+
+function reagendar(cancel = false) {
+  if (cancel && !confirm('Tem certeza que deseja cancelar esta aula?')) return;
+
+  const form = document.getElementById('event-form');
+  const formData = new FormData(form);
+  const fomData = Object.fromEntries(formData.entries());
+
+  // Fallbacks if not filled
+  if (!fomData.novaData) fomData.novaData = fomData.dataOriginal;
+  if (!fomData.novoHorario) fomData.novoHorario = fomData.horarioOriginal;
+  fomData.cancelled = cancel;
+
+  // Check if this event already exists in reagendadas
+  const existing = reagendadas.find(r => 
+    r.id === fomData.id &&
+    (r.novaData === fomData.dataOriginal && r.novoHorario === fomData.horarioOriginal)
+  );
+
+  if (existing) { // Keep the very first originals
+    fomData.dataOriginal = existing.dataOriginal;
+    fomData.horarioOriginal = existing.horarioOriginal;
+  }
+
+  // Replace or insert, using original values as the unique key
+  const index = reagendadas.findIndex(r =>
+    r.id === fomData.id &&
+    r.dataOriginal === fomData.dataOriginal &&
+    r.horarioOriginal === fomData.horarioOriginal
+  );
+
+  if (index !== -1) reagendadas[index] = fomData; // replace
+  else reagendadas.push(fomData); // insert
+
+  // remove past date from reagendadas
+  const stripTime = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  reagendadas = reagendadas.filter(reg => stripTime(new Date(reg.novaData)) >= stripTime(new Date()))
+
+  saveData();
+  form.reset();
+  showPage('agenda');
+}
+
+function renderAgenda() {
+  const proximasAulas = nextLessons(alunos);
+  const agenda = [document.getElementById('today'), document.getElementById('nextDays')]
+  agenda[0].innerHTML = '';
+  agenda[1].innerHTML = '';
+
+  for(let i=0;i<proximasAulas.length;i++){
+    if (proximasAulas[i].length === 0) {
+      agenda[i].classList.remove('grid');
+      agenda[i].innerHTML = `<p class="tac">Nenhuma aula agendada para ${i?'os próximos dias':'hoje'} :)</p>`;
+      continue;
+    }
+    agenda[i].classList.add('grid');
+
+    const frag = document.createDocumentFragment();
+    
+    proximasAulas[i].forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      if(item.cancelled) card.classList.add('partiallyVisible')
+
+      if(item.cancelled || i) addbtn = `<div class="btn" onClick="showPage('edit-event', '${item.alunoId}', '${item.dataISO}', '${item.horario}')">Editar</div>`
+      else addbtn = `<div class="btn" onClick="showPage('add-lesson', '${item.alunoId}', '${item.dataISO}', '${item.horario}')">Adicionar</div>`
+
+      const dow = new Intl.DateTimeFormat('pt-BR',{ weekday:'short' }).format(new Date(item.dataISO+'T00:00:00')) //day of the week
+
+      card.innerHTML = `
+        <div class="nome">${item.nome}</div>
+        <div class="linha">${rotuloData(item.dataISO)}  •  ${dow.charAt(0).toUpperCase()+dow.slice(1,3)}  •  ${horaBR(item.horario)}${item.cancelled ? ' (cancelada)' : ''}</div>
+        <div class="rodape">
+          ${addbtn}
+          <a class="btn noround" href="https://google.com/maps/dir/?api=1&destination=${item.endereco.replace(/ ,/g, "+")}" target="_blank" rel="noopener noreferrer">Maps</a>
+          <a class="btn" href="https://wa.me/${item.telefone.replace(/[ +\-\(\)'"]/g, "")}" target="_blank" rel="noopener noreferrer">Whatsapp</a>
+        </div>
+      `;
+      frag.appendChild(card);
+    });
+
+    agenda[i].replaceChildren(frag);
+  }
+}
+
+// -- Panorama Functions -- 
+
+function renderPanorama(){
+  const panorama = filterPanorama()
+
+  const tbody = document.querySelector('#lessons-summary tbody');
+  tbody.innerHTML = '';
+
+  panorama
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .forEach(entry => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${entry?.nome || ''}</td>
+        <td>${entry?.aulasRealizadas || '0'}</td>
+        <td>${entry?.aulasPagas.toString().replace(".",",") || '0'}</td>
+      `;
+      tbody.appendChild(tr);
+    })
+}
+
+function filterPanorama(){
   const today = new Date();
-  const startOfWeek = new Date();
-  startOfWeek.setDate(today.getDate() + 1);
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const monthStart = new Date(year, month, 1);
+  const monthEnd = new Date(year, month + 1, 0);
 
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  const startPanorama = document.getElementById('startPanorama')
+  const endPanorama = document.getElementById('endPanorama')
+  startPanorama.value = startPanorama.value ? startPanorama.value : dateConvert(monthStart)
+  endPanorama.value = endPanorama.value ? endPanorama.value : dateConvert(monthEnd)
 
-  const weekLessons = aulas.filter(a => {
-    const lessonDate = new Date(a.data);
-    return lessonDate >= startOfWeek && lessonDate <= endOfWeek;
-  });
-
-  document.getElementById('week').innerHTML = weekLessons.map(a => `
-    <div class="lesson">
-      <p><b>Aluno:</b> ${alunos.find(al => al.id === a.aluno)?.nome || 'Desconhecido'}</p>
-      <p><b>Data:</b> ${invertDate(a.data)}</p>
-      <p><b>Horário:</b> ${a.horario}</p>
-      <p><b>Duração:</b> ${a.tempo} horas</p>
-    </div>
-  `).join('');
-
+  return calcPanorama(startPanorama.value, endPanorama.value)
 }
 
-    // const today = new Date();
-    // const todayLessons = aulas.filter(a => {
-    //   const lessonDate = new Date(a.data);
-    //   return lessonDate.getDate() === today.getDate() &&
-    //          lessonDate.getMonth() === today.getMonth() &&
-    //          lessonDate.getFullYear() === today.getFullYear();
-    // });
-    // document.getElementById('today').innerHTML = todayLessons.map(a => `
-    //   <div class="lesson">
-    //     <p><b>Aluno:</b> ${alunos.find(al => al.id === a.aluno)?.nome || 'Desconhecido'}</p>
-    //     <p><b>Horário:</b> ${a.horario}</p>
-    //     <p><b>Duração:</b> ${a.tempo} horas</p>
-    //   </div>
-    // `).join('');
+
+function calcPanorama(start, end) {
+  const inicio = new Date(start)
+  const fim = new Date(end)
+
+  return resultado = alunos.map(aluno => {
+    // Pagamentos até o fim do período → saldo inicial
+    let saldo = (aluno.pagamentos || [])
+      .filter(p => new Date(p.data) <= fim)
+      .reduce((sum, p) => sum + p.valor, 0);
+
+    // Aulas antes do período → desconta custo
+    const aulasAnteriores = aulasDadas.filter(a =>
+      a.aluno === aluno.id &&
+      new Date(a.data) < inicio
+    );
+    for (const aula of aulasAnteriores) {
+      saldo -= aula.tempo * aula.valorHora;
+    }
+
+    // Aulas no período (ordenadas por data)
+    const aulasPeriodo = aulasDadas
+      .filter(a =>
+        a.aluno === aluno.id &&
+        new Date(a.data) >= inicio &&
+        new Date(a.data) <= fim
+      )
+      .sort((a, b) => new Date(a.data) - new Date(b.data));
+
+    // Contagem com frações
+    let aulasPagas = 0;
+    for (const aula of aulasPeriodo) {
+      const custoAula = aula.tempo * aula.valorHora;
+      if (saldo >= custoAula) {
+        aulasPagas += 1; // aula inteira
+        saldo -= custoAula;
+      } else if (saldo > 0) {
+        aulasPagas += saldo / custoAula; // fração
+        saldo = 0;
+      }
+    }
+
+    return {
+      nome: aluno.nome,
+      aulasRealizadas: aulasPeriodo.length,
+      aulasPagas: parseFloat(aulasPagas.toFixed(2)) // até 2 casas decimais
+    };
+  });
+}
 
 // -- FAB functions --
 
@@ -149,9 +368,9 @@ const actionFab = (str) => {
 
 const hideOverlay = () => toggleFab();
 
-// -- Date Functions --
+// -- Date and Time Functions --
 
-const todayDate = (date) => {
+const dateConvert = (date) => {
   const today = date ? date : new Date();
   const year = today.getFullYear();
   const month = (today.getMonth() + 1).toString().padStart(2, '0');
@@ -179,8 +398,36 @@ const invertDate = (date) => {
   return `${day}/${month}/${year}`;
 }
 
-document.getElementById('startFilter').value = todayDate(startDate);
-document.getElementById('endFilter').value = todayDate(endDate);
+function hojeISO(){ 
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function addDaysISO(n){
+  const d = new Date();
+  d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+
+function rotuloData(iso){
+  const today = hojeISO();
+  const tomorrow = addDaysISO(1);
+  if(iso === today) return "Hoje";
+  if(iso === tomorrow) return "Amanhã";
+
+  const dt = new Date(iso+"T00:00:00");
+  const fmt = new Intl.DateTimeFormat('pt-BR',{ day:'2-digit', month:'short' });
+
+  return fmt.format(dt).replace('.', '').toLowerCase();
+}
+
+function horaBR(hhmm){
+  const [h,m] = hhmm.split(':');
+  return `${h}h${m>0?m:''}`
+}
+
+document.getElementById('startFilter').value = dateConvert(startDate);
+document.getElementById('endFilter').value = dateConvert(endDate);
 
 // -- Student Functions --
 
@@ -201,64 +448,78 @@ document.getElementById('student-form').addEventListener('submit', e => {
   showPage('list-students');
 });
 
-function renderStudents() {
-  const tbody = document.querySelector('#students-table tbody');
-  tbody.innerHTML = '';
-  alunos.forEach(a => {
-    const valorDevido = aulas
-      .filter(au => au.aluno == a.id && !au.experimental)
+const filterStudents = (searchString) => alunos.filter(a => a.nome.toLowerCase().includes(searchString.toLowerCase()));
+
+function renderStudents(searchString = null) {
+  const filteredStudents = searchString ? filterStudents(searchString) : alunos;
+  const listStudents = document.getElementById('students-grid');
+  listStudents.innerHTML = '';
+
+  listStudents.classList.add('grid');
+  if (filteredStudents.length === 0) {
+    listStudents.classList.remove('grid');
+    listStudents.innerHTML = `<p>Nenhum resultado encontrado ${searchString ? `para <b>${searchString}</b> ` : ''}=/</p>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  filteredStudents.forEach(student => {
+    const valorDevido = aulasDadas
+      .filter(au => au.aluno == student.id && !au.experimental)
       .reduce((soma, au) => soma + (au.tempo * au.valorHora), 0);
-    const saldo = a.pagos - valorDevido;
-    let cor = 'gray';
-    if (saldo > 0) cor = 'green';
-    if (saldo < 0) cor = 'red';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${a.nome}</td>
-      <td class="mob">${a.responsavel || ''}</td>
-      <td class="mob" style="color:${a.pausado ? 'red' : 'green'};">${a.pausado ? 'Pausado' : 'Ativo'}</td>
-      <td class="mob">R$ ${valorDevido.toFixed(2).replace(".",",")}</td>
-      <td class="mob">R$ ${a.pagos.toFixed(2).replace(".",",")}</td>
-      <td style="color:${cor}; font-weight:bold;">R$ ${saldo.toFixed(2).replace(".",",")}</td>
-      <td class="flexContainer">
-        <div class="button" onclick="openStudent('${a.id}')">${iconDetails}</div>
-        <div class="button" onclick="pauseThisStudent('${a.id}')">${a.pausado ? iconPlay : iconPause}</div>
-        <div class="button" onclick="generateThisReport('${a.id}')">${iconReport}</div>
-        <a class="button" target="_blank" href="https://wa.me/${a.telefone.replace(/[ +\-\(\)'"]/g, "")}">${iconWhatsapp}</a>
-      </td>
+    const saldo = student.pagos - valorDevido;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="nome">${student.nome}<div class="ampel" style="color:${student.pausado ? 'red' : '#49e048'};"></div></div>
+      <div class="linha">${student.diaSemana1 && student.horario1 ? `${student.diaSemana1.slice(0,3) || ''} ${horaBR(student.horario1) || ''}` : ''}${student.diaSemana2 && student.horario2 ? `  •  ${student.diaSemana2.slice(0,3) || ''} ${horaBR(student.horario2) || ''}` : ''}${student.diaSemana3 && student.horario3 ? `  •  ${student.diaSemana3.slice(0,3) || ''} ${horaBR(student.horario3) || ''}` : ''}</div>
+      <div class="linha">Saldo:<span style="color:${saldo < 0 ? 'var(--money-red)' : 'var(--money-green)'}; font-weight:bold">R$ ${saldo.toFixed(2).replace(".",",")}</span></div>
+      <div class="rodape">
+        <div class="btn" onClick="openStudent('${student.id}')">Info</div>
+        <div class="btn" onClick="generateThisReport('${student.id}')">Relatório</div>
+      </div>
     `;
-    // <button onclick="editThisStudent('${a.id}')">Editar</button>
-    tbody.appendChild(tr);
+
+    frag.appendChild(card);
   });
+  listStudents.replaceChildren(frag);
 }
 
 function openStudent(id) {
   alunoSelecionado = alunos.find(a => a.id == id);
-  const valorDevido = aulas
+  const valorDevido = aulasDadas
     .filter(au => au.aluno == id && !au.experimental)
     .reduce((soma, au) => soma + (au.tempo * au.valorHora), 0);
 
   document.getElementById('student-info').innerHTML = `
     <p><b>Nome:</b> ${alunoSelecionado.nome || ''}</p>
-    <p><b>Status:</b> <span style="color:${alunoSelecionado.pausado ? 'red' : 'green'}">${alunoSelecionado.pausado ? 'Pausado' : 'Ativo'}</span></p>
-    <p><b>Dia da semana:</b> ${alunoSelecionado.diaSemana || ''}</p>
-    <p><b>Horário:</b> ${alunoSelecionado.horario || ''}</p>
+    <p><b>Status:</b> <span style="color:${alunoSelecionado.pausado ? 'var(--money-red)' : 'var(--money-green)'}">${alunoSelecionado.pausado ? 'Pausado' : 'Ativo'}</span></p>
+    <p><b>Horários:</b>
+      ${alunoSelecionado.diaSemana1 && alunoSelecionado.horario1 ? `${alunoSelecionado.diaSemana1.slice(0,3) || ''} ${horaBR(alunoSelecionado.horario1) || ''}` : ''}
+      ${alunoSelecionado.diaSemana2 && alunoSelecionado.horario2 ? `  •  ${alunoSelecionado.diaSemana2.slice(0,3) || ''} ${horaBR(alunoSelecionado.horario2) || ''}` : ''}
+      ${alunoSelecionado.diaSemana3 && alunoSelecionado.horario3 ? `  •  ${alunoSelecionado.diaSemana3.slice(0,3) || ''} ${horaBR(alunoSelecionado.horario3) || ''}` : ''}
+    </p>
     <hr>
     <p><b>Responsável:</b> ${alunoSelecionado.responsavel || ''}</p>
-    <p><b>Telefone:</b> ${alunoSelecionado.telefone || ''}</p>
+    <p><b>Telefone:</b> <a href="https://wa.me/${alunoSelecionado.telefone.replace(/[ +\-\(\)'"]/g, "")}" target="_blank" rel="noopener noreferrer">${alunoSelecionado.telefone || ''}</a></p>
+    ${alunoSelecionado.responsavel2 ? 
+      `<p><b>Responsável 2:</b> ${alunoSelecionado.responsavel2 || ''}</p>` : ''}
+    ${alunoSelecionado.telefone2 ? 
+      `<p><b>Telefone 2:</b> <a href="https://wa.me/${alunoSelecionado.telefone2.replace(/[ +\-\(\)'"]/g, "")}" target="_blank" rel="noopener noreferrer">${alunoSelecionado.telefone2 || ''}</a></p>` : ''}
     <p><b>Endereço:</b> ${alunoSelecionado.endereco || ''}</p>
     <hr>
     <p><b>Escola:</b> ${alunoSelecionado.escola ||  ''}</p>
     <p><b>Série:</b> ${alunoSelecionado.serie || ''}</p>
     <hr>
     <p><b>Valor hora:</b> R$ ${alunoSelecionado.valorHora}</p>
-    <p><b>Horas totais:</b> ${(aulas.filter(au => au.aluno == id).reduce((soma, au) => soma + au.tempo, 0)).toString().replace(".",",")} horas</p>
+    <p><b>Horas totais:</b> ${(aulasDadas.filter(au => au.aluno == id).reduce((soma, au) => soma + au.tempo, 0)).toString().replace(".",",")} horas</p>
     <p><b>Valor Devido:</b> R$ ${valorDevido.toFixed(2).replace(".",",")}</p>
     <p><b>Valor Pago:</b> R$ ${alunoSelecionado.pagos.toFixed(2).replace(".",",")}</p>
-    <p><b>Saldo:</b> <span style="color:${(alunoSelecionado.pagos - valorDevido) < 0 ? 'red' : 'green'}; font-weight:bold;">R$ ${(alunoSelecionado.pagos - valorDevido).toFixed(2).replace(".",",")}</span></p>
+    <p><b>Saldo:</b> <span style="color:${(alunoSelecionado.pagos - valorDevido) < 0 ? 'var(--money-red)' : 'var(--money-green)'}; font-weight:bold;">R$ ${(alunoSelecionado.pagos - valorDevido).toFixed(2).replace(".",",")}</span></p>
     <hr>
-    <p><b>Início:</b> ${alunoSelecionado.inicioContrato || ''}</p>
-    <p><b>Fim:</b> ${alunoSelecionado.fimContrato || ''}</p>
+    <p><b>Início:</b> ${invertDate(alunoSelecionado.inicioContrato) || ''}</p>
+    <p><b>Fim:</b> ${invertDate(alunoSelecionado.fimContrato) || ''}</p>
     <hr>
     <p><b>Observações:</b> ${alunoSelecionado.observacoes || ''}</p>
     <hr>
@@ -269,8 +530,8 @@ function openStudent(id) {
     <hr>
     <div class="flexContainer">
       <button onclick="changeHourly()">Alterar valor hora</button>
-      <button onclick="showPage('add-payment', alunoSelecionado.id)">Registrar pagamento</button>
-      <button onclick="generateReport()">Gerar relatório</button>
+      <button onclick="showPage('add-payment', alunoSelecionado.id)">Pagamento</button>
+      <button onclick="generateReport()">Relatório</button>
     </div>
   `;
 
@@ -282,7 +543,6 @@ function pauseStudent() {
   if (!alunoSelecionado) return;
   alunoSelecionado.pausado = !alunoSelecionado.pausado;
   saveData();
-  alert(alunoSelecionado.pausado ? 'Aluno pausado!' : 'Aluno reativado!');
 }
 
 function pauseThisStudent(id) {
@@ -317,14 +577,7 @@ function changeHourly() {
   openStudent(alunoSelecionado.id);
 }
 
-function fillStudentDropdown() {
-  const sel = document.querySelector('#lesson-form select[name="aluno"]');
-  const filterSel = document.getElementById('filter-student');
-  const options = alunos.filter(a => !a.pausado)
-    .map(a => `<option value="${a.id}">${a.nome}</option>`).join('');
-  sel.innerHTML = options;
-  filterSel.innerHTML = `<option value="">Todos os alunos</option>` + alunos.map(a => `<option value="${a.id}">${a.nome}</option>`).join('');
-}
+// -- Lesson Functions --
 
 document.getElementById('lesson-form').addEventListener('submit', e => {
   e.preventDefault();
@@ -335,33 +588,31 @@ document.getElementById('lesson-form').addEventListener('submit', e => {
   data.experimental = formData.has('experimental');
 
   if (data.id) {
-    const idx = aulas.findIndex(l => l.id == data.id);
-    aulas[idx] = { 
-      ...aulas[idx], 
+    const idx = aulasDadas.findIndex(l => l.id == data.id);
+    aulasDadas[idx] = { 
+      ...aulasDadas[idx], 
       ...data, 
       tempo: parseFloat(data.tempo), 
-      valorHora: parseFloat(aulas[idx].valorHora) 
+      valorHora: parseFloat(aulasDadas[idx].valorHora) 
     };
   } else {
     data.id = 'cl_' + uuidv4();
     const aluno = alunos.find(a => a.id == data.aluno);
     data.valorHora = parseFloat(aluno.valorHora);
     data.tempo = parseFloat(data.tempo);
-    aulas.push(data);
+    aulasDadas.push(data);
   }
+
   saveData();
   e.target.reset();
-  showPage('list-lessons');
+  showPage('agenda');
 });
-
-
-// -- Lesson Functions --
 
 function renderLessons() {
   const tbody = document.querySelector('#lessons-table tbody');
   const filtro = document.getElementById('filter-student').value;
   tbody.innerHTML = '';
-  aulas
+  aulasDadas
     .filter(l => !filtro || l.aluno == filtro)
     .sort((a, b) => new Date(b.data) - new Date(a.data))
     .forEach(l => {
@@ -369,7 +620,7 @@ function renderLessons() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${aluno?.nome || ''}</td>
-      <td>${l.data}</td>
+      <td>${invertDate(l.data).toString().slice(0,5)}</td>
       <td>${l.tempo.toString().replace(".",",")}</td>
       <td class="mob">R$ ${l.experimental ? '0,00' : l.valorHora.toFixed(2).replace(".",",")}</td>
       <td class="flexContainer">
@@ -381,7 +632,7 @@ function renderLessons() {
 }
 
 function toggleExp(id) {
-  const aula = aulas.find(a => a.id == id);
+  const aula = aulasDadas.find(a => a.id == id);
   aula.experimental = !aula.experimental;
   saveData();
   renderLessons();
@@ -389,7 +640,7 @@ function toggleExp(id) {
 
 function editLesson(id) {
   showPage('add-lesson');
-  const aula = aulas.find(a => a.id == id);
+  const aula = aulasDadas.find(a => a.id == id);
   const form = document.getElementById('lesson-form');
 
   for (let k in aula) {
@@ -402,28 +653,12 @@ function editLesson(id) {
 
 
 const deleteLesson = (id) => {
-  aulas = aulas.filter(a => a.id !== id);
+  aulasDadas = aulasDadas.filter(a => a.id !== id);
   saveData();
   renderLessons();
 }
 
 // -- Payment Functions --
-
-function fillPaymentDropdown(alunoId = null) {
-  const sel = document.querySelector('#payment-form select[name="aluno"]');
-  const options = alunos
-    .filter(a => !a.pausado)
-    .map(a => `<option value="${a.id}">${a.nome}</option>`)
-    .join('');
-  sel.innerHTML = options;
-
-  // Se um alunoId foi passado, selecione-o
-  if (alunoId) { sel.value = alunoId }
-
-  // Preencher a data com a de hoje
-  const dateInput = document.querySelector('#payment-form input[name="data"]');
-  dateInput.value = todayDate();
-}
 
 document.getElementById('payment-form').addEventListener('submit', e => {
   e.preventDefault();
@@ -449,7 +684,7 @@ document.getElementById('payment-form').addEventListener('submit', e => {
 
   saveData();
   e.target.reset();
-  showPage('list-students');
+  showPage('panorama');
 });
 
 
@@ -460,9 +695,9 @@ function generateThisReport(id) {
   generateReport()
 }
 
-const listLessons = () => {
+const listCompletedLessons = () => {
   if (!alunoSelecionado) return []
-  aulasDadas = aulas
+  return aulasDadas
     .filter(a => a.aluno === alunoSelecionado.id)
     .map(a => ({
       tipo: 'aula',
@@ -471,7 +706,6 @@ const listLessons = () => {
       valor: a.experimental ? 0 : (-a.tempo * a.valorHora), // valor devido
       experimental: a.experimental || false
     }));
-  return aulasDadas;
 }
 
 const listPayments = () => {
@@ -487,12 +721,11 @@ const listPayments = () => {
 function studentStatement() {
   if (!alunoSelecionado) return '';
   
-  const aulasDadas = listLessons();
+  const aulas = listCompletedLessons();
   const pagamentos = listPayments();
 
   // Juntar tudo e ordenar por data
-  const historico = [...pagamentos, ...aulasDadas].sort((a, b) => new Date(a.data) - new Date(b.data));
-  console.log(historico);
+  const historico = [...pagamentos, ...aulas].sort((a, b) => new Date(a.data) - new Date(b.data));
   
   // Gerar texto do relatório
   let saldo = 0;
@@ -504,13 +737,12 @@ function studentStatement() {
       table = previousDate ? `
         <tr class="table-balance">
           <td><b>${invertDate(previousDate)}</b></td>
-          <td>Saldo: <span style="color:${saldo<0 ? 'red' : 'green'}">R$ ${saldo.toFixed(2).replace('.', ',')}</span></td>
+          <td>Saldo: <span style="color:${saldo<0 ? 'var(--money-red)' : 'var(--money-green)'}">R$ ${saldo.toFixed(2).replace('.', ',')}</span></td>
         </tr>
       ` + table : table;
       previousDate = item.data;
     }
     saldo += item.valor;
-    console.log(item.experimental);
 
     table = `
     <tr>
@@ -524,7 +756,7 @@ function studentStatement() {
   table = `
   <table id="statement">
     <thead>
-      <tr>
+      <tr class="table-balance">
         <th>Item</th>
         <th>Valor</th>
       </tr>
@@ -532,7 +764,7 @@ function studentStatement() {
     <tbody>
       <tr class="table-balance">
         <td><b>${invertDate(previousDate)}</b></td>
-        <td>Saldo: <span style="color:${saldo<0 ? 'red' : 'green'}">R$ ${saldo.toFixed(2).replace('.', ',')}</span></td>
+        <td>Saldo: <span style="color:${saldo<0 ? 'var(--money-red)' : 'var(--money-green)'}">R$ ${saldo.toFixed(2).replace('.', ',')}</span></td>
       </tr>
       ` + table + `
     </tbody>
@@ -547,10 +779,10 @@ function generateReport() {
       return;
   }
 
-  const aulasDadas = listLessons();
+  const aulas = listCompletedLessons();
   const pagamentos = listPayments();
 
-  const filteredAulas = aulasDadas.filter(a => new Date(a.data) >= startDate && new Date(a.data) <= endDate).sort((a, b) => new Date(a.data) - new Date(b.data));
+  const filteredAulas = aulas.filter(a => new Date(a.data) >= startDate && new Date(a.data) <= endDate).sort((a, b) => new Date(a.data) - new Date(b.data));
   const filteredPagamentos = pagamentos.filter(a => new Date(a.data) >= startDate && new Date(a.data) <= endDate).sort((a, b) => new Date(a.data) - new Date(b.data));
 
   // Gerar texto do relatório
@@ -561,13 +793,13 @@ function generateReport() {
   filteredAulas.forEach(item => {
       if (!item.experimental) count++;
       saldo += item.valor;
-      relatorio += `${item.data} (${item.experimental ? "experimental" : (count + 'ª aula')}) - ${item.tempo} hora${item.tempo > 1 ? 's' : ''} - R$ ${item.experimental ? '0,00' : Math.abs(item.valor).toFixed(2).replace('.', ',')}<br>`;
+      relatorio += `${invertDate(item.data)} (${item.experimental ? "experimental" : (count + 'ª aula')}) - ${item.tempo} hora${item.tempo > 1 ? 's' : ''} - R$ ${item.experimental ? '0,00' : Math.abs(item.valor).toFixed(2).replace('.', ',')}<br>`;
   });
 
   relatorio += `<br><b>Pagamentos:</b><br>`;
   filteredPagamentos.forEach(item => {
       saldo += item.valor;
-      relatorio += `${item.data} - R$ ${Math.abs(item.valor).toFixed(2)}<br>`;
+      relatorio += `${invertDate(item.data)} - R$ ${Math.abs(item.valor).toFixed(2)}<br>`;
   });
 
   relatorio += `<br><b>Saldo total</b>: R$ ${Math.abs(saldo.toFixed(2))} (${saldo >= 0 ? "crédito" : "débito"})`;
@@ -593,15 +825,21 @@ const copyToClipboard = () => {
 
 function saveData() {
   localStorage.setItem('alunos', JSON.stringify(alunos));
-  localStorage.setItem('aulas', JSON.stringify(aulas));
+  localStorage.setItem('aulasDadas', JSON.stringify(aulasDadas));
+  localStorage.setItem('reagendadas', JSON.stringify(reagendadas)); // Aulas reagendadas: {idAluno, dataOriginal, novaData, novoHorario}
+  // localStorage.setItem('aulasDadas', JSON.stringify(dadas)); // Aulas concluídas: {idAluno, data}
 }
 
 function eraseData() {
   if (confirm('Tem certeza que deseja apagar todos os dados?')) {
     localStorage.removeItem('alunos');
-    localStorage.removeItem('aulas');
+    localStorage.removeItem('aulasDadas');
+    localStorage.removeItem('reagendadas');
+
     alunos = [];
-    aulas = [];
+    aulasDadas = [];
+    reagendadas = [];
+
     showPage('list-students');
     document.getElementById('tab1').checked = true;
     alert('Dados apagados!');
@@ -609,7 +847,7 @@ function eraseData() {
 }
 
 function exportData() {
-  const data = JSON.stringify({ alunos, aulas }, null, 2);
+  const data = JSON.stringify({ alunos, aulasDadas, reagendadas }, null, 2);
   const blob = new Blob([data], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -625,10 +863,10 @@ function importData(e) {
   reader.onload = () => {
     const data = JSON.parse(reader.result);
     alunos = data.alunos || [];
-    aulas = data.aulas || [];
+    aulasDadas = data.aulasDadas || [];
     saveData();
     alert('Backup importado!');
-    showPage('list-students');
+    showPage('agenda');
     document.getElementById('tab1').checked = true;
   };
   reader.readAsText(file);
@@ -649,3 +887,12 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+
+// -- Initialization --
+
+let alunos = JSON.parse(localStorage.getItem('alunos') || '[]');
+let aulasDadas = JSON.parse(localStorage.getItem('aulasDadas') || '[]');
+let reagendadas = JSON.parse(localStorage.getItem('reagendadas') || '[]');
+let alunoSelecionado = null;
+
+showPage('agenda');
